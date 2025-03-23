@@ -44,7 +44,9 @@ services:
     healthcheck:
       test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
       timeout: 20s
-      retries: 10
+      retries: 30
+      start_period: 1m
+      interval: 5s
 
   epp-server:
     build:
@@ -59,6 +61,7 @@ services:
       - "443:443"
 #      - "80:80"
       - "7001:700" # EPP port
+      - "7043:743" # EPP port with SSL
     environment:
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
@@ -68,7 +71,8 @@ services:
 #      - epp_web_cgi:/var/www/cgi-bin/epp
 #      - epp_ssl_private:/etc/pki/tls/private
 #      - epp_ssl_certs:/etc/pki/tls/certs
-#      - ./etc/httpd/conf.d:/etc/httpd/conf.d
+      - ./etc/httpd/conf.d:/etc/httpd/conf.d
+      - ./etc/httpd/epp_server_common.conf:/etc/httpd/epp_server_common.conf
 #      - ./epp-server-repo/cgi-bin:/var/www/cgi-bin
     networks:
       - epp_net

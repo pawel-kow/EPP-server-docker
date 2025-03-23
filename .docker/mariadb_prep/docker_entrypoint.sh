@@ -32,7 +32,7 @@ else
   exit 1
 fi
 
-cat epp-1.0.15/sql/registry.sql | grep -v "GRANT " > "$output_dir/$registry_sql_out_file"
+cat epp-1.0.15/sql/registry.sql | grep -v "GRANT " | grep -v "CREATE USER" > "$output_dir/$registry_sql_out_file"
 
 #### PREPARE registry insert SQL
 
@@ -73,5 +73,3 @@ replace_env_vars() {
 }
 
 cat "/install/create_registrar.sql" | replace_reg_cr_date | replace_reg_pwd_hash | replace_env_vars > "$output_dir/$registrar_sql_out_file"
-
-#|  
