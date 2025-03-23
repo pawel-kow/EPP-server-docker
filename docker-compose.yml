@@ -30,8 +30,8 @@ services:
     depends_on:
       - mariadb_prep
     environment:
-      MYSQL_RANDOM_ROOT_PASSWORD: true
-      MYSQL_DATABASE: registry
+      MYSQL_RANDOM_ROOT_PASSWORD: true # password will be in logs of the first start
+      MYSQL_DATABASE: registry # do not change
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
@@ -47,6 +47,7 @@ services:
       retries: 30
       start_period: 1m
       interval: 5s
+    restart: unless-stopped
 
   epp-server:
     build:
@@ -65,10 +66,12 @@ services:
     environment:
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_HOST: mariadb
+      EPP_SERVER_REPOSITORY: EXAMPLESRV
+      EPP_SERVER_ID: NIC.EXAMPLE EPP Server
     volumes:
-      - ./etc/registry:/etc/registry
+#      - ./etc/registry:/etc/registry
 #      - ./etc/pki:/etc/pki
-#      - epp_web_cgi:/var/www/cgi-bin/epp
 #      - epp_ssl_private:/etc/pki/tls/private
 #      - epp_ssl_certs:/etc/pki/tls/certs
       - ./etc/httpd/conf.d:/etc/httpd/conf.d
@@ -76,6 +79,7 @@ services:
 #      - ./epp-server-repo/cgi-bin:/var/www/cgi-bin
     networks:
       - epp_net
+    restart: unless-stopped
 
 networks:
   epp_net:
@@ -84,9 +88,3 @@ networks:
 volumes:
   maria_db_install_scripts:
   mariadb_data:
-  epp_config:
-  epp_local:
-  epp_web_cgi:
-  epp_ssl_private:
-  epp_ssl_certs:
-  epp_httpd_conf:
