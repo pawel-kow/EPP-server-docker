@@ -1,0 +1,88 @@
+services:
+
+  mariadb_prep:
+    build:
+      context: .docker/mariadb_prep
+#      dockerfile: .docker/mariadb_prep/Dockerfile
+    environment:
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - REG_NAME=Foo
+      - REG_ID=foo
+      - REG_PWD=bar # Note: REG_PWD, not REG_PWD_HASH
+#      - REG_PWD_HASH # alternative to REG_PWD = base64(sha1(pwd))
+      - REG_PREFIX=FOO
+      - REG_EMAIL=foo@example.com
+      - REG_WHOIS=whois.foo.example
+      - REG_URL=https://nic.foo.example
+      - REG_ABUSE_EMAIL=abuse@foo.example
+      - REG_ABUSE_PHONE=+12.3456789
+      - REG_ACCOUNT_BALANCE=100000
+      - REG_CREDIT_LIMIT=0
+      - REG_CREDIT_THRESHHOLD=0
+      - REGISTRY_TLD=EXAMPLE
+    volumes:
+      - ./install/user.sql:/install/user.sql
+      - maria_db_install_scripts:/docker-entrypoint-initdb.d
+    restart: no
+  mariadb:
+    image: mariadb:10.1
+    depends_on:
+      - mariadb_prep
+    environment:
+      MYSQL_RANDOM_ROOT_PASSWORD: true
+      MYSQL_DATABASE: registry
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - maria_db_install_scripts:/docker-entrypoint-initdb.d
+    ports:
+      - "3306:3306" # Optional: expose port for external access
+    networks:
+      - epp_net
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  epp-server:
+    build:
+      context: .
+      dockerfile: .docker/epp/Dockerfile
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    ports:
+      - "43:43"
+      - "4343:4343"
+      - "443:443"
+#      - "80:80"
+      - "7001:700" # EPP port
+    environment:
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - ./etc/registry:/etc/registry
+#      - ./etc/pki:/etc/pki
+#      - epp_web_cgi:/var/www/cgi-bin/epp
+#      - epp_ssl_private:/etc/pki/tls/private
+#      - epp_ssl_certs:/etc/pki/tls/certs
+#      - ./etc/httpd/conf.d:/etc/httpd/conf.d
+#      - ./epp-server-repo/cgi-bin:/var/www/cgi-bin
+    networks:
+      - epp_net
+
+networks:
+  epp_net:
+    driver: bridge
+
+volumes:
+  maria_db_install_scripts:
+  mariadb_data:
+  epp_config:
+  epp_local:
+  epp_web_cgi:
+  epp_ssl_private:
+  epp_ssl_certs:
+  epp_httpd_conf:
