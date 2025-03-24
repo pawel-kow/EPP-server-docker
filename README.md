@@ -28,13 +28,24 @@ Execute:
 docker compose --profile run up
 ```
 
+## Connecting to the server
+
+The server listens currently on port 700 and 743.
+Both ports are now without TLS.
+
+TODO: activate TLS on port 743.
+
 ## Remove server and the data
 Execute:
 ```
 docker compose --profile run down -v
 ```
 
-## Generate certificate for apache
+## TODOs:
+- finish the configuration to work with TLS connection
+### Generate certificate for apache
 ```bash
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout ./etc/pki/tls/epp.localhost.key -out ./etc/pki/tls/epp.localhost.crt -subj "/C=DE/CN=epp.localhost"
 ```
+- activate CRON jobs
+- check why WHOIS and das crash apache without any output
