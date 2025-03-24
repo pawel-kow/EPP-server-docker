@@ -25,10 +25,10 @@ services:
       - ./install/user.sql:/install/user.sql
       - maria_db_install_scripts:/docker-entrypoint-initdb.d
     restart: no
+    profiles:
+      - setup
   mariadb:
     image: mariadb:10.1
-    depends_on:
-      - mariadb_prep
     environment:
       MYSQL_RANDOM_ROOT_PASSWORD: true # password will be in logs of the first start
       MYSQL_DATABASE: registry # do not change
@@ -48,6 +48,8 @@ services:
       start_period: 1m
       interval: 5s
     restart: unless-stopped
+    profiles:
+      - run
 
   epp-server:
     build:
@@ -80,6 +82,8 @@ services:
     networks:
       - epp_net
     restart: unless-stopped
+    profiles:
+      - run
 
 networks:
   epp_net:
