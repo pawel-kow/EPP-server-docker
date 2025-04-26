@@ -32,7 +32,7 @@ else
   exit 1
 fi
 
-cat epp-1.0.15/sql/registry.sql | grep -v "GRANT " | grep -v "CREATE USER" > "$output_dir/$registry_sql_out_file"
+cat epp-1.0.15/sql/registry.sql | grep -v "GRANT " | grep -v "USER " | grep -v "FLUSH" > "$output_dir/$registry_sql_out_file"
 
 #### PREPARE registry insert SQL
 
