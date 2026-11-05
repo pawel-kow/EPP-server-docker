@@ -1,3 +1,19 @@
+x-epp-build: &epp-build
+  context: .
+  dockerfile: .docker/epp/Dockerfile
+
+# Values rendered into registry.conf by every container that runs the EPP scripts
+x-registry-env: &registry-env
+  MYSQL_USER: ${MYSQL_USER}
+  MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+  MYSQL_HOST: mariadb
+  EPP_SERVER_REPOSITORY: EXAMPLESRV
+  EPP_SERVER_ID: NIC.EXAMPLE EPP Server
+  ZONE_NS1: ${ZONE_NS1:-ns1.example.net} # SOA and apex NS of the zone, without trailing dot
+  ZONE_NS2: ${ZONE_NS2:-ns2.example.net}
+  TRANSFER_LOCK_DAYS: ${TRANSFER_LOCK_DAYS:-0} # upstream: 60
+  TRANSFER_WAITING_MINUTES: ${TRANSFER_WAITING_MINUTES:-5} # upstream: 7200 (5 days)
+
 services:
 
   mariadb_prep:
@@ -7,20 +23,35 @@ services:
     environment:
       - MYSQL_USER=${MYSQL_USER}
       - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-      - REG_NAME=Foo
-      - REG_ID=foo
-      - REG_PWD=bar # Note: REG_PWD, not REG_PWD_HASH
-#      - REG_PWD_HASH # alternative to REG_PWD = base64(sha1(pwd))
-      - REG_PREFIX=FOO
-      - REG_EMAIL=foo@example.com
-      - REG_WHOIS=whois.foo.example
-      - REG_URL=https://nic.foo.example
-      - REG_ABUSE_EMAIL=abuse@foo.example
-      - REG_ABUSE_PHONE=+12.3456789
-      - REG_ACCOUNT_BALANCE=100000
-      - REG_CREDIT_LIMIT=0
-      - REG_CREDIT_THRESHHOLD=0
-      - REGISTRY_TLD=EXAMPLE
+      # Registrar 1
+      - REG1_NAME=Foo
+      - REG1_ID=foo
+      - REG1_PWD=bar # Note: REG1_PWD, not REG1_PWD_HASH
+#      - REG1_PWD_HASH # alternative to REG1_PWD = base64(sha1(pwd))
+      - REG1_PREFIX=FO # exactly 2 characters, unique per registrar
+      - REG1_EMAIL=foo@example.com
+      - REG1_WHOIS=whois.foo.example
+      - REG1_URL=https://nic.foo.example
+      - REG1_ABUSE_EMAIL=abuse@foo.example
+      - REG1_ABUSE_PHONE=+12.3456789
+      - REG1_ACCOUNT_BALANCE=100000
+      - REG1_CREDIT_LIMIT=0
+      - REG1_CREDIT_THRESHHOLD=0
+      # Registrar 2
+      - REG2_NAME=Baz
+      - REG2_ID=baz
+      - REG2_PWD=qux # Note: REG2_PWD, not REG2_PWD_HASH
+#      - REG2_PWD_HASH # alternative to REG2_PWD = base64(sha1(pwd))
+      - REG2_PREFIX=BZ # exactly 2 characters, unique per registrar
+      - REG2_EMAIL=baz@example.com
+      - REG2_WHOIS=whois.baz.example
+      - REG2_URL=https://nic.baz.example
+      - REG2_ABUSE_EMAIL=abuse@baz.example
+      - REG2_ABUSE_PHONE=+12.3456780
+      - REG2_ACCOUNT_BALANCE=100000
+      - REG2_CREDIT_LIMIT=0
+      - REG2_CREDIT_THRESHHOLD=0
+      - REGISTRY_TLD=${REGISTRY_TLD:-EXAMPLE}
     volumes:
       - ./install/user.sql:/install/user.sql
       - maria_db_install_scripts:/docker-entrypoint-initdb.d
@@ -38,11 +69,11 @@ services:
       - mariadb_data:/var/lib/mysql
       - maria_db_install_scripts:/docker-entrypoint-initdb.d
     ports:
-      - "3306:3306" # Optional: expose port for external access
+      - "3310:3306" # Optional: expose port for external access
     networks:
       - epp_net
     healthcheck:
-      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1"] # TCP: the first-boot init server has no networking
       timeout: 20s
       retries: 30
       start_period: 1m
@@ -52,9 +83,7 @@ services:
       - run
 
   epp-server:
-    build:
-      context: .
-      dockerfile: .docker/epp/Dockerfile
+    build: *epp-build
     depends_on:
       mariadb:
         condition: service_healthy
@@ -64,23 +93,61 @@ services:
       - "443:443"
 #      - "80:80"
       - "7001:700" # EPP port
-      - "7043:743" # EPP port with SSL
+      - "7043:743" # EPP port with TLS
     environment:
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-      MYSQL_HOST: mariadb
-      EPP_SERVER_REPOSITORY: EXAMPLESRV
-      EPP_SERVER_ID: NIC.EXAMPLE EPP Server
+      <<: *registry-env
+      EPP_TLS_CN: ${EPP_TLS_CN:-epp.localhost} # only used when generating the certificate
     volumes:
 #      - ./etc/registry:/etc/registry
-#      - ./etc/pki:/etc/pki
-#      - epp_ssl_private:/etc/pki/tls/private
-#      - epp_ssl_certs:/etc/pki/tls/certs
+      - ./etc/pki/epp:/etc/pki/tls/epp # server.crt and server.key, generated if missing
       - ./etc/httpd/conf.d:/etc/httpd/conf.d
       - ./etc/httpd/epp_server_common.conf:/etc/httpd/epp_server_common.conf
 #      - ./epp-server-repo/cgi-bin:/var/www/cgi-bin
     networks:
       - epp_net
+    restart: unless-stopped
+    profiles:
+      - run
+
+  epp-cron:
+    build: *epp-build
+    command: ["/entrypoint.sh", "cron"]
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      nameserver:
+        condition: service_healthy
+    environment:
+      <<: *registry-env
+      CRON_WRITE_ZONE: ${CRON_WRITE_ZONE:-* * * * *}
+      CRON_CHANGE_DOMAIN_STATUS: ${CRON_CHANGE_DOMAIN_STATUS:-* * * * *}
+      CRON_AUTO_APPROVE_TRANSFER: ${CRON_AUTO_APPROVE_TRANSFER:-* * * * *}
+      CRON_AUTO_CLEAN: ${CRON_AUTO_CLEAN:-5 0 * * *}
+    volumes:
+      - zone_data:/var/named
+    networks:
+      - epp_net
+    restart: unless-stopped
+    profiles:
+      - run
+
+  nameserver:
+    build: *epp-build
+    command: ["/entrypoint.sh", "nameserver"]
+    environment:
+      REGISTRY_TLD: ${REGISTRY_TLD:-EXAMPLE}
+    ports:
+      - "${DNS_PORT:-5053}:53/tcp"
+      - "${DNS_PORT:-5053}:53/udp"
+    volumes:
+      - zone_data:/var/named
+    networks:
+      - epp_net
+    healthcheck:
+      test: ["CMD", "rndc", "-s", "127.0.0.1", "-k", "/var/named/rndc.key", "status"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
     restart: unless-stopped
     profiles:
       - run
@@ -92,3 +159,4 @@ networks:
 volumes:
   maria_db_install_scripts:
   mariadb_data:
+  zone_data:

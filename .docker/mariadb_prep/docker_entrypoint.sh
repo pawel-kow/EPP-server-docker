@@ -50,16 +50,17 @@ replace_reg_cr_date() {
   sed "s/<REG_CR_DATE>/$current_date/g"
 }
 
-# Replace REG_PWD_HASH (calculate from REG_PWD if needed)
-replace_reg_pwd_hash() {
-  local reg_pwd_hash="${REG_PWD_HASH:-$(sha1_base64 "$REG_PWD")}"
-  sed "s|<REG_PWD_HASH>|{SHA}$reg_pwd_hash|g"
-}
+# Set REGn_PWD_HASH for each registrar (calculate from REGn_PWD if needed)
+for n in 1 2; do
+  pwd_var="REG${n}_PWD"
+  hash_var="REG${n}_PWD_HASH"
+  export "$hash_var={SHA}${!hash_var:-$(sha1_base64 "${!pwd_var}")}"
+done
 
 # Replace all <VAR_NAME> expressions with corresponding env variable values
 replace_env_vars() {
   while IFS= read -r line; do
-    local pattern='<([A-Z_]+)>'
+    local pattern='<([A-Z0-9_]+)>'
     while [[ $line =~ $pattern ]]; do
       local var_name="${BASH_REMATCH[1]}"
       local var_value=""
@@ -72,4 +73,4 @@ replace_env_vars() {
   done
 }
 
-cat "/install/create_registrar.sql" | replace_reg_cr_date | replace_reg_pwd_hash | replace_env_vars > "$output_dir/$registrar_sql_out_file"
+cat "/install/create_registrar.sql" | replace_reg_cr_date | replace_env_vars > "$output_dir/$registrar_sql_out_file"
