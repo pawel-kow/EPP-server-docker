@@ -34,13 +34,14 @@ RUN wget http://downloads.sourceforge.net/project/modwhois/mod_whois/0.1/mod_who
 RUN wget https://github.com/xpanel/epp/archive/refs/tags/v1.0.15.tar.gz && \
     tar -zxvf v1.0.15.tar.gz && cp -r ./epp-1.0.15/cgi-bin /var/www
 
-#RUN openssl genrsa -out /etc/pki/tls/private/www.xpanel.com.key 2048 && \
-#    openssl req -new -key /etc/pki/tls/private/www.xpanel.com.key -out /etc/pki/tls/private/www.xpanel.com.csr -subj "/C=DE/CN=www.xpanel.com"
+# Patch the upstream sources for running under compose
+COPY ./.docker/epp/patch_upstream.sh /install/patch_upstream.sh
+RUN bash /install/patch_upstream.sh
 
-#RUN openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/pki/tls/certs/localhost.key -out /etc/pki/tls/certs/localhost.crt -subj "/CN=localhost"
-
-RUN openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/pki/tls/epp.localhost.key -out /etc/pki/tls/epp.localhost.crt -subj "/CN=epp.localhost"
-
+# Cron. pam_loginuid fails in containers and would stop crond from running jobs.
+RUN dnf -y install cronie && \
+    sed -i '/pam_loginuid/s/^/#/' /etc/pam.d/crond && \
+    mkdir -p /var/log/epp
 
 # Configure Apache
 RUN mkdir -p /etc/httpd/conf.d
@@ -53,11 +54,12 @@ RUN chmod -R 0755 /var/www/cgi-bin/epp
 # Create necessary directories
 RUN mkdir -p /etc/registry /usr/local/registry && cp ./epp-1.0.15/etc/registry/* /etc/registry
 COPY ./etc/registry/* /etc/registry/
+COPY ./etc/cron.d/registry /etc/registry/cron.template
 
 # Expose necessary ports
 EXPOSE 43 80 443 700 743
 
-# Start Apache in the foreground
+# Apache by default; docker-compose.yml passes the role for the other services
 COPY ./.docker/epp/docker_entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 CMD ["/entrypoint.sh"]
