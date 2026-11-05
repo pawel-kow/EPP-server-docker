@@ -1,0 +1,30 @@
+{
+	"name": "Python 3 + Node.js",
+	"image": "mcr.microsoft.com/devcontainers/python:3-3.14-bookworm",
+	"features": {
+		"ghcr.io/devcontainers/features/github-cli:1": {},
+		"ghcr.io/devcontainers/features/docker-in-docker:2": {}
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"Anthropic.claude-code"
+			]
+		}
+	},
+	"remoteUser": "vscode",
+        "mounts": [
+            "source=claude-code-config-rpp-work,target=/home/vscode/.claude,type=volume",
+            "source=user-config-rpp-work,target=/home/vscode/.config,type=volume"
+        ],
+        "remoteUser": "vscode",
+        "containerEnv": {
+            "CLAUDE_CONFIG_DIR": "/home/vscode/.claude"
+        },
+        "remoteEnv": {
+            "LOCAL_WORKSPACE_FOLDER": "${localWorkspaceFolder}"
+        },
+        // re-own the mount on every start to keep it writable for the remote user.
+        "postStartCommand": "sudo chown -R vscode:vscode /home/vscode/.claude /home/vscode/.config"
+
+}
