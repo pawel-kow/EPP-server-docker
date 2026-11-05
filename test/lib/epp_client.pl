@@ -97,13 +97,25 @@ sub epp_session {
 	return $sock;
 }
 
-# Sends the inside of <command> and returns the result code, or undef when there is no reply
-sub command_code {
-	my ($sock, $body) = @_;
-	my $cltrid = new_cltrid();
+# Sends the inside of <command> and returns the reply frame, or undef when there is no reply.
+# A fresh clTRID is used unless one is given.
+sub command_reply {
+	my ($sock, $body, $cltrid) = @_;
+	$cltrid //= new_cltrid();
 	send_frame($sock, qq{<?xml version="1.0" encoding="UTF-8" standalone="no"?>}
 		. qq{<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command>$body<clTRID>$cltrid</clTRID></command></epp>});
-	return result_code(read_frame($sock));
+	return read_frame($sock);
+}
+
+# As command_reply, but returns the result code
+sub command_code { return result_code(command_reply(@_)); }
+
+# As command_reply, but the frame carries no clTRID
+sub command_reply_without_cltrid {
+	my ($sock, $body) = @_;
+	send_frame($sock, qq{<?xml version="1.0" encoding="UTF-8" standalone="no"?>}
+		. qq{<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command>$body</command></epp>});
+	return read_frame($sock);
 }
 
 sub is_code {

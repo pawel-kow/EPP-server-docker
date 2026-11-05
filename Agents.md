@@ -122,7 +122,8 @@ docker run --rm -v /workspaces:/w alpine rm -rf /w/EPP-server-docker
 
 ## Upstream behaviour to know about
 
-- `clTRID` is unique in the database. A reused value kills the CGI script, and the client gets no response. Only `session-login.cgi` handles this, answering `2400`.
+- `clTRID` is unique per registrar. `record_cl_transaction` in `EPP/Transaction.pm` stores it as `<registrar id>:<clTRID>`, hashing the client's value when that would not fit the 64-character column, and answers `2400` on a reuse without logging the refused command. Query `clTRIDframe` for the value as sent. Rows written before this form existed are unprefixed, so they no longer count as reuse. An absent `clTRID` reaches the scripts as an empty string, is stored as `NULL`, and is left out of the reply.
+- `mod_epp` ends the session on every `<logout>`, even when the script answers `2400`. The next command gets `2002`.
 - Contact IDs must start with the registrar's `prefix` followed by `-`. `prefix` is `char(2)` and must be unique.
 - A single invalid record stops BIND from loading the zone, and it keeps serving the previous version. After a change, check `logs nameserver` for `not loaded due to errors`.
 - Rows in `host_addr` written by unfixed `command-create.cgi` have an empty `ip`. `write-zone.pl` and `EPPWriter.pm` derive the type from the address, so these rows still work.
