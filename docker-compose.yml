@@ -18,8 +18,8 @@ services:
 
   mariadb_prep:
     build:
-      context: .docker/mariadb_prep
-#      dockerfile: .docker/mariadb_prep/Dockerfile
+      context: .
+      dockerfile: .docker/mariadb_prep/Dockerfile
     environment:
       - MYSQL_USER=${MYSQL_USER}
       - MYSQL_PASSWORD=${MYSQL_PASSWORD}
@@ -102,7 +102,7 @@ services:
       - ./etc/pki/epp:/etc/pki/tls/epp # server.crt and server.key, generated if missing
       - ./etc/httpd/conf.d:/etc/httpd/conf.d
       - ./etc/httpd/epp_server_common.conf:/etc/httpd/epp_server_common.conf
-#      - ./epp-server-repo/cgi-bin:/var/www/cgi-bin
+#      - ./epp-server/cgi-bin:/var/www/cgi-bin
     networks:
       - epp_net
     restart: unless-stopped

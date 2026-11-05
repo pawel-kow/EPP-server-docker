@@ -31,17 +31,13 @@ RUN wget http://downloads.sourceforge.net/project/modwhois/mod_whois/0.1/mod_who
     apxs -c -i mod_whois.c && \
     cd /install
 
-RUN wget https://github.com/xpanel/epp/archive/refs/tags/v1.0.15.tar.gz && \
-    tar -zxvf v1.0.15.tar.gz && cp -r ./epp-1.0.15/cgi-bin /var/www
-
-# Patch the upstream sources for running under compose
-COPY ./.docker/epp/patch_upstream.sh /install/patch_upstream.sh
-RUN bash /install/patch_upstream.sh
-
 # Cron. pam_loginuid fails in containers and would stop crond from running jobs.
 RUN dnf -y install cronie && \
     sed -i '/pam_loginuid/s/^/#/' /etc/pam.d/crond && \
     mkdir -p /var/log/epp
+
+# EPP server sources from the epp-server submodule
+COPY ./epp-server/cgi-bin /var/www/cgi-bin
 
 # Configure Apache
 RUN mkdir -p /etc/httpd/conf.d
@@ -52,7 +48,8 @@ RUN rm /etc/httpd/conf.d/ssl.conf
 RUN chmod -R 0755 /var/www/cgi-bin/epp
 
 # Create necessary directories
-RUN mkdir -p /etc/registry /usr/local/registry && cp ./epp-1.0.15/etc/registry/* /etc/registry
+RUN mkdir -p /etc/registry /usr/local/registry
+COPY ./epp-server/etc/registry/* /etc/registry/
 COPY ./etc/registry/* /etc/registry/
 COPY ./etc/cron.d/registry /etc/registry/cron.template
 

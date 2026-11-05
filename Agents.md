@@ -4,7 +4,7 @@ This file provides guidance to coding Agents when working with code in this repo
 
 ## What this repository is
 
-A Docker packaging of the XPanel EPP registry server (https://github.com/xpanel/epp). It holds only Dockerfiles, entrypoint scripts, SQL templates and Apache/registry config. The EPP server source (Perl CGI, `registry.sql`) is not in this repo: it is downloaded as the `v1.0.15` tarball at image build time. There is no test suite, linter or build system; a change is verified by bringing the stack up.
+A Docker packaging of the XPanel EPP registry server (https://github.com/xpanel/epp). It holds only Dockerfiles, entrypoint scripts, SQL templates and Apache/registry config. The EPP server source (Perl CGI, `registry.sql`) is in the `epp-server` git submodule (the fork `pawel-kow/epp`), and both images copy it from that checkout at build time. Run `git submodule update --init` before building. Changes to the server code belong in the submodule; see `epp-server/AGENTS.md`. There is no test suite, linter or build system; a change is verified by bringing the stack up.
 
 ## Commands
 
@@ -31,15 +31,15 @@ docker compose --profile run logs -f epp-server
 Two compose profiles split provisioning from runtime, and they communicate only through the `maria_db_install_scripts` volume:
 
 1. **`setup` profile, `mariadb_prep` (Alpine, one-shot).** `.docker/mariadb_prep/docker_entrypoint.sh` renders three SQL files into the volume:
-   - `01_registry.sql`: upstream `sql/registry.sql` with `GRANT`, `USER` and `FLUSH` lines filtered out
+   - `01_registry.sql`: `epp-server/sql/registry.sql` with `GRANT`, `USER` and `FLUSH` lines filtered out
    - `02_registrar.sql`: `create_registrar.sql` with its placeholders filled in; it clears the registrar, TLD and price tables, then inserts two registrars and one TLD
    - `03_user.sql`: `install/user.sql` with `<MYSQL_USER>` filled in
 2. **`run` profile, `mariadb` (10.1).** Mounts the same volume as `/docker-entrypoint-initdb.d`. The image runs those scripts only on first boot, when `mariadb_data` is empty.
-3. **`run` profile, `epp-server` (Fedora 26, Apache).** Starts after `mariadb` is healthy. This image has three roles, chosen by the argument to `.docker/epp/docker_entrypoint.sh`: `apache` (default), `cron` and `nameserver`. `mod_epp` turns EPP traffic into HTTP requests, which `etc/httpd/epp_server_common.conf` aliases to the upstream CGI scripts in `/var/www/cgi-bin/epp` (`command/`, `session/`, `error/`). Login is Apache Basic auth against the `registrar` table via `mod_authn_dbd`, so `registrar.pw` must be in `{SHA}base64(sha1(pwd))` format.
+3. **`run` profile, `epp-server` (Fedora 26, Apache).** Starts after `mariadb` is healthy. This image has three roles, chosen by the argument to `.docker/epp/docker_entrypoint.sh`: `apache` (default), `cron` and `nameserver`. `mod_epp` turns EPP traffic into HTTP requests, which `etc/httpd/epp_server_common.conf` aliases to the CGI scripts in `/var/www/cgi-bin/epp` (`command/`, `session/`, `error/`). Login is Apache Basic auth against the `registrar` table via `mod_authn_dbd`, so `registrar.pw` must be in `{SHA}base64(sha1(pwd))` format.
 4. **`run` profile, `nameserver` (same image, BIND).** Authoritative for `REGISTRY_TLD`, reading `named.<TLD>.zone` from the `zone_data` volume. It generates `rndc.key` in that volume.
 5. **`run` profile, `epp-cron` (same image, cronie).** Starts after `mariadb` and `nameserver` are healthy, and renders `etc/cron.d/registry` from the `CRON_*` variables. `write-zone.pl` writes into `zone_data`, then runs `rndc` against `nameserver`.
 
-`.docker/epp/patch_upstream.sh` patches the upstream sources at build time, and fails the build if a pattern no longer matches. It makes the zone NS names and the transfer lock and waiting period configurable, replaces `systemctl` with `rndc`, and fixes the host address type bugs (see below).
+The `epp-server` fork differs from upstream `v1.0.15` in these ways: the zone NS names and the transfer lock and waiting period are configurable, `write-zone.pl` reloads BIND with `rndc` rather than `systemctl`, and the host address type bugs are fixed (see below).
 
 ## Configuration: where values take effect
 
@@ -53,9 +53,9 @@ Two compose profiles split provisioning from runtime, and they communicate only 
 - **Credentials** for the DB user come from `.env`.
 - **`MYSQL_DATABASE` must stay `registry`.**
 
-## Upgrading the upstream EPP version
+## Changing the EPP server code
 
-The version is hardcoded in three files, which must change together: `.docker/epp/Dockerfile`, `.docker/mariadb_prep/Dockerfile` and `.docker/mariadb_prep/docker_entrypoint.sh` (the `epp-1.0.15/` path). Then check that `.docker/epp/patch_upstream.sh` still applies.
+Edit `epp-server/`, then rebuild with `--build`: the images are built from the working tree of the submodule, including uncommitted changes. Commit and push inside the submodule first, then commit the updated pointer here. A parent commit that points at an unpushed submodule commit breaks fresh clones.
 
 ## Ports
 
@@ -70,12 +70,47 @@ EPP is reached from the host on the mapped ports, not the in-container ports tha
 | DNS, TCP and UDP (`DNS_PORT`) | 5053 | 53 |
 | MariaDB | 3310 | 3306 |
 
+## Throwaway test stacks in the devcontainer
+
+The devcontainer has no Docker daemon of its own: it talks to the host's daemon through a mounted socket. A plain `docker compose` run from `/workspaces/EPP-server-docker` therefore goes wrong in three ways:
+
+- **Bind mount paths.** Compose expands `./...` to `/workspaces/EPP-server-docker/...`, but the daemon resolves that path on the host, where it does not exist. Docker silently creates empty directories there instead of failing. The real host path of the workspace is in `$LOCAL_WORKSPACE_FOLDER`. Build contexts are not affected, because the client sends them, so a successful build proves nothing about mounts, and neither does `config -q`.
+- **Ports.** The main stack may already be running on the host and holding the ports in the table above, so a second stack cannot publish them. Check with `docker ps`.
+- **Names and volumes.** Without `-p`, commands act on the project `epp-server-docker`: the real stack and its data, including on `down -v`.
+
+Symptoms of the bind mount problem: `mariadb_prep` stops with `Input file '/install/user.sql' not found`, `/docker-entrypoint-initdb.d` is empty in `mariadb`, and `epp-cron` logs `Table 'registry.domain_tld' doesn't exist`. Containers can still report as up. Apache also starts with an empty `conf.d`.
+
+For a test stack, use a separate project name and the override file [.devcontainer/docker-compose.test.yml](.devcontainer/docker-compose.test.yml). It removes the published ports and replaces every bind mount with its host path, and compose refuses to run if `LOCAL_WORKSPACE_FOLDER` is unset. If a bind mount is added to `docker-compose.yml`, add it to the override too.
+
+```bash
+# docker-compose.yml must stay first: it sets the project directory, and so where .env is read from
+c="docker compose -p epptest -f docker-compose.yml -f .devcontainer/docker-compose.test.yml"
+$c --profile setup --profile run build
+$c --profile setup up mariadb_prep
+$c --profile setup rm -f mariadb_prep
+$c --profile run up -d --wait
+
+# Remove the containers, volumes and images afterwards
+$c --profile setup --profile run down -v --rmi local
+```
+
+With no published ports, reach services from inside the containers, for example `docker exec -i epptest-epp-server-1 ...` against `127.0.0.1:700` for EPP, or `docker exec epptest-nameserver-1 dig @127.0.0.1 ...` for DNS.
+
+`etc/pki/epp` is the same directory the main stack uses. If `server.crt` and `server.key` are missing, the test stack generates them there.
+
+If a run did use the wrong paths, bring it down, list what it left on the host, and delete only that:
+
+```bash
+docker run --rm -v /workspaces:/w alpine find /w -exec ls -ld {} \;
+docker run --rm -v /workspaces:/w alpine rm -rf /w/EPP-server-docker
+```
+
 ## Upstream behaviour to know about
 
 - `clTRID` is unique in the database. A reused value kills the CGI script, and the client gets no response.
 - Contact IDs must start with the registrar's `prefix` followed by `-`. `prefix` is `char(2)` and must be unique.
 - A single invalid record stops BIND from loading the zone, and it keeps serving the previous version. After a change, check `logs nameserver` for `not loaded due to errors`.
-- Rows in `host_addr` created before the patch have an empty `ip`. `write-zone.pl` and `EPPWriter.pm` are patched to derive the type from the address, so these rows still work.
+- Rows in `host_addr` written by unfixed `command-create.cgi` have an empty `ip`. `write-zone.pl` and `EPPWriter.pm` derive the type from the address, so these rows still work.
 
 ## Known incomplete areas
 

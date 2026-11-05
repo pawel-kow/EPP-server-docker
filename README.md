@@ -8,6 +8,13 @@ This repository contains a full plug-and-play setup to run EPP server locally.
 - docker
 - docker compose
 
+### Sources
+The EPP server code is in the `epp-server` git submodule, and the images are built from that checkout. Fetch it before the first build:
+```
+git submodule update --init
+```
+The submodule URL uses SSH, so this needs a GitHub SSH key.
+
 ### Configuration:
 - adjust [.env](.env) file with mysql credentials of registry user; the optional settings below also go there
 - adjust [docker-compose.yml](./docker-compose.yml) and edit mariadb_prep container environment variables (`REG1_*`, `REG2_*`), to specify the two registrar accounts to be provisioned

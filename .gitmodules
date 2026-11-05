@@ -1,0 +1,3 @@
+[submodule "epp-server"]
+	path = epp-server
+	url = git@github.com:pawel-kow/epp.git
