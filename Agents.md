@@ -4,7 +4,22 @@ This file provides guidance to coding Agents when working with code in this repo
 
 ## What this repository is
 
-A Docker packaging of the XPanel EPP registry server (https://github.com/xpanel/epp). It holds only Dockerfiles, entrypoint scripts, SQL templates and Apache/registry config. The EPP server source (Perl CGI, `registry.sql`) is in the `epp-server` git submodule (the fork `pawel-kow/epp`), and both images copy it from that checkout at build time. Run `git submodule update --init` before building. Changes to the server code belong in the submodule; see `epp-server/AGENTS.md`. There is no test suite, linter or build system; a change is verified by bringing the stack up.
+A Docker packaging of the XPanel EPP registry server (https://github.com/xpanel/epp). It holds only Dockerfiles, entrypoint scripts, SQL templates and Apache/registry config. The EPP server source (Perl CGI, `registry.sql`) is in the `epp-server` git submodule (the fork `pawel-kow/epp`), and both images copy it from that checkout at build time. Run `git submodule update --init` before building. Changes to the server code belong in the submodule; see `epp-server/AGENTS.md`. There is no linter or build system; a change is verified by bringing the stack up.
+
+## Tests
+
+Do not write throwaway tests: no one-off scripts, ad hoc probes or test files kept outside the repository. Every test goes in the `./test` folder, written so that it can be rerun later as a regression test.
+
+Work test-first (TDD): write a test in `./test` that reproduces the bug or describes the new behaviour, run it and see it fail for the expected reason, make the smallest change that passes, then rerun the suite.
+
+```bash
+# Starts an isolated stack with fresh data, runs test/*.t inside epp-server, then removes the stack
+test/run.sh
+test/run.sh test/login.t
+KEEP_STACK=1 test/run.sh    # leaves the stack up for inspection
+```
+
+Tests are plain Perl using core modules, plus `DBI` where a test has to seed data, because they run inside the container. `test/lib/epp_client.pl` is the shared EPP client and assertions.
 
 ## Commands
 
@@ -35,7 +50,7 @@ Two compose profiles split provisioning from runtime, and they communicate only 
    - `02_registrar.sql`: `create_registrar.sql` with its placeholders filled in; it clears the registrar, TLD and price tables, then inserts two registrars and one TLD
    - `03_user.sql`: `install/user.sql` with `<MYSQL_USER>` filled in
 2. **`run` profile, `mariadb` (10.1).** Mounts the same volume as `/docker-entrypoint-initdb.d`. The image runs those scripts only on first boot, when `mariadb_data` is empty.
-3. **`run` profile, `epp-server` (Fedora 26, Apache).** Starts after `mariadb` is healthy. This image has three roles, chosen by the argument to `.docker/epp/docker_entrypoint.sh`: `apache` (default), `cron` and `nameserver`. `mod_epp` turns EPP traffic into HTTP requests, which `etc/httpd/epp_server_common.conf` aliases to the CGI scripts in `/var/www/cgi-bin/epp` (`command/`, `session/`, `error/`). Login is Apache Basic auth against the `registrar` table via `mod_authn_dbd`, so `registrar.pw` must be in `{SHA}base64(sha1(pwd))` format.
+3. **`run` profile, `epp-server` (Fedora 26, Apache).** Starts after `mariadb` is healthy. This image has three roles, chosen by the argument to `.docker/epp/docker_entrypoint.sh`: `apache` (default), `cron` and `nameserver`. `mod_epp` turns EPP traffic into HTTP requests, which `etc/httpd/epp_server_common.conf` aliases to the CGI scripts in `/var/www/cgi-bin/epp` (`command/`, `session/`, `error/`). Login is Apache Basic auth against the `registrar` table via `mod_authn_dbd`, so `registrar.pw` must be in `{SHA}base64(sha1(pwd))` format. `EPPAuthURI` is a URL with no directory behind it, so the auth block must stay a `<Location /epp/auth>`: a `<Directory>` block never applies, and logins then reach `session-login.cgi` unchecked.
 4. **`run` profile, `nameserver` (same image, BIND).** Authoritative for `REGISTRY_TLD`, reading `named.<TLD>.zone` from the `zone_data` volume. It generates `rndc.key` in that volume.
 5. **`run` profile, `epp-cron` (same image, cronie).** Starts after `mariadb` and `nameserver` are healthy, and renders `etc/cron.d/registry` from the `CRON_*` variables. `write-zone.pl` writes into `zone_data`, then runs `rndc` against `nameserver`.
 
@@ -107,7 +122,7 @@ docker run --rm -v /workspaces:/w alpine rm -rf /w/EPP-server-docker
 
 ## Upstream behaviour to know about
 
-- `clTRID` is unique in the database. A reused value kills the CGI script, and the client gets no response.
+- `clTRID` is unique in the database. A reused value kills the CGI script, and the client gets no response. Only `session-login.cgi` handles this, answering `2400`.
 - Contact IDs must start with the registrar's `prefix` followed by `-`. `prefix` is `char(2)` and must be unique.
 - A single invalid record stops BIND from loading the zone, and it keeps serving the previous version. After a change, check `logs nameserver` for `not loaded due to errors`.
 - Rows in `host_addr` written by unfixed `command-create.cgi` have an empty `ip`. `write-zone.pl` and `EPPWriter.pm` derive the type from the address, so these rows still work.
