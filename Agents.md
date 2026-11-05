@@ -67,6 +67,7 @@ The `epp-server` fork differs from upstream `v1.0.15` in these ways: the zone NS
 - **DB connection settings exist in two places.** Apache's `DBDParams` hardcodes `host=mariadb` and reads `${MYSQL_USER}`/`${MYSQL_PASSWORD}` from the environment, while the CGI scripts use `registry.conf`. `MYSQL_HOST` affects only the latter.
 - **Credentials** for the DB user come from `.env`.
 - **`MYSQL_DATABASE` must stay `registry`.**
+- **`dns_opt: single-request`** on `epp-server` and `epp-cron` keeps glibc from sending A and AAAA in parallel. Without it, about 1 lookup of `mariadb` in 5 stalls for the 5s resolver timeout, and every CGI run does such a lookup in a new process. A new service that runs the scripts needs it too.
 
 ## Changing the EPP server code
 

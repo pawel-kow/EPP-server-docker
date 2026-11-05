@@ -14,6 +14,12 @@ x-registry-env: &registry-env
   TRANSFER_LOCK_DAYS: ${TRANSFER_LOCK_DAYS:-0} # upstream: 60
   TRANSFER_WAITING_MINUTES: ${TRANSFER_WAITING_MINUTES:-5} # upstream: 7200 (5 days)
 
+# glibc sends A and AAAA in parallel, and one reply is sometimes lost on the way through
+# Docker's DNS. The lookup then stalls for the 5s resolver timeout. Every CGI run looks up
+# the database host in a new process, so this has to be set for the scripts' containers.
+x-sequential-dns: &sequential-dns
+  - single-request
+
 services:
 
   mariadb_prep:
@@ -84,6 +90,7 @@ services:
 
   epp-server:
     build: *epp-build
+    dns_opt: *sequential-dns
     depends_on:
       mariadb:
         condition: service_healthy
@@ -112,6 +119,7 @@ services:
   epp-cron:
     build: *epp-build
     command: ["/entrypoint.sh", "cron"]
+    dns_opt: *sequential-dns
     depends_on:
       mariadb:
         condition: service_healthy
