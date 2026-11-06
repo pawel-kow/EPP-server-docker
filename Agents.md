@@ -132,4 +132,5 @@ docker run --rm -v /workspaces:/w alpine rm -rf /w/EPP-server-docker
 ## Known incomplete areas
 
 - Port 700 stays plain text, and TLS on 743 does not request client certificates.
+- DS data is stored and returned by `domain:info`, but `write-zone.pl` does not publish it, and WHOIS and DAS always answer `DNSSEC:Unsigned`.
 - The README reports that the WHOIS and DAS configs crash Apache with no output; the cause is unresolved.
