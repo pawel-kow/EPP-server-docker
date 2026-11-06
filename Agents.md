@@ -19,6 +19,8 @@ test/run.sh test/login.t
 KEEP_STACK=1 test/run.sh    # leaves the stack up for inspection
 ```
 
+`run.sh` starts each test detached and collects its output from a file, because attached `docker exec` can lose its stream and exit 0 with no output, which would pass a test unseen.
+
 Tests are plain Perl using core modules, plus `DBI` where a test has to seed data, because they run inside the container. `test/lib/epp_client.pl` is the shared EPP client and assertions.
 
 ## Commands

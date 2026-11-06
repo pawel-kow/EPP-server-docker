@@ -38,11 +38,36 @@ else
 	tests=(test/*.t)
 fi
 
+# Runs one test in the container. "docker exec" is only used detached or for a quick read: the
+# attached form can lose its stream after a fraction of a second and then exit 0 with no output,
+# which would pass every test unseen. The exit status file is what proves the test has finished.
+run_test() {
+	local container="$project-epp-server-1" script rc='' waited=0
+	script="$(mktemp)"
+	# The client library is prepended so that nothing has to be copied into the image
+	cat test/lib/epp_client.pl "$1" > "$script"
+	docker cp -q "$script" "$container:/tmp/test.pl"
+	rm -f "$script"
+	docker exec "$container" rm -f /tmp/test.out /tmp/test.rc
+	docker exec -d "$container" sh -c 'perl /tmp/test.pl > /tmp/test.out 2>&1; echo $? > /tmp/test.rc.new; mv /tmp/test.rc.new /tmp/test.rc'
+	while [ -z "$rc" ] && [ "$waited" -lt "$test_timeout" ]; do
+		sleep 1
+		waited=$((waited + 1))
+		rc="$(docker exec "$container" cat /tmp/test.rc 2>/dev/null || true)"
+	done
+	docker cp -q "$container:/tmp/test.out" - | tar -xO
+	if [ -z "$rc" ]; then
+		echo "not ok - $1 did not finish within ${test_timeout}s"
+		return 1
+	fi
+	return "$rc"
+}
+
+test_timeout=600
 status=0
 for t in "${tests[@]}"; do
 	echo "=== $t ==="
-	# The client library is prepended so that nothing has to be copied into the image
-	cat test/lib/epp_client.pl "$t" | docker exec -i "$project-epp-server-1" perl - || status=1
+	run_test "$t" || status=1
 done
 
 if [ "$status" -ne 0 ]; then
