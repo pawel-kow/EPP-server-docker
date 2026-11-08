@@ -1,7 +1,9 @@
 FROM fedora:26
 
-# Install required packages
-RUN dnf -y update && \
+# Install required packages. The open-file limit is capped because rpm in Fedora 26 closes every
+# possible descriptor before each scriptlet, which never ends under BuildKit's limit of about 2^31.
+RUN ulimit -n 1024 && \
+    dnf -y update && \
     dnf -y install bind bind-utils bind-sdb httpd httpd-devel mod_perl php php-mcrypt php-mbstring perl-CPAN lynx perl-ExtUtils-Embed perl-XML-LibXML perl-CGI perl-YAML wget apr-util-mysql mod_ssl openssl-devel redhat-rpm-config pbzip2 perl-Test-Pod perl-File-Type perl-HTML-Template perl-MIME-Lite perl-Net-DNS perl-Net-SSLeay perl-XML-LibXML perl-XML-Parser perl-XML-Writer perl-XML-XPath perl-Authen-SASL perl-XML-Writer-String perl-MIME-Base64 perl-Email-Valid perl-CGI-Session perl-DBD-mysql gcc net-tools git
 
 # mariadb-client
@@ -32,7 +34,8 @@ RUN wget http://downloads.sourceforge.net/project/modwhois/mod_whois/0.1/mod_who
     cd /install
 
 # Cron. pam_loginuid fails in containers and would stop crond from running jobs.
-RUN dnf -y install cronie && \
+RUN ulimit -n 1024 && \
+    dnf -y install cronie && \
     sed -i '/pam_loginuid/s/^/#/' /etc/pam.d/crond && \
     mkdir -p /var/log/epp
 

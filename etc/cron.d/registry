@@ -16,6 +16,9 @@ MAILTO=""
 # run auto-clean-unused-contact-and-host.pl
 <CRON_AUTO_CLEAN>	root	/var/www/cgi-bin/epp/cron/auto-clean-unused-contact-and-host.pl >> /proc/1/fd/1 2>&1
 
+# run clean-epp-sessions.pl
+<CRON_CLEAN_SESSIONS>	root	/var/www/cgi-bin/epp/cron/clean-epp-sessions.pl >> /proc/1/fd/1 2>&1
+
 # Upstream also ships these; they are not enabled here:
 #59 * * * *	root	/var/www/cgi-bin/epp/cron/statistics.pl >> /proc/1/fd/1 2>&1
 #59 * * * *	root	/usr/local/registry/registry_db_backup.pl >> /proc/1/fd/1 2>&1

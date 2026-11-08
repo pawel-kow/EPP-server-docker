@@ -41,6 +41,7 @@ start_cron() {
       -e "s|<CRON_CHANGE_DOMAIN_STATUS>|$CRON_CHANGE_DOMAIN_STATUS|" \
       -e "s|<CRON_AUTO_APPROVE_TRANSFER>|$CRON_AUTO_APPROVE_TRANSFER|" \
       -e "s|<CRON_AUTO_CLEAN>|$CRON_AUTO_CLEAN|" \
+      -e "s|<CRON_CLEAN_SESSIONS>|$CRON_CLEAN_SESSIONS|" \
       /etc/registry/cron.template > /etc/cron.d/registry
   chmod 644 /etc/cron.d/registry
 

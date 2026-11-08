@@ -131,6 +131,7 @@ services:
       CRON_CHANGE_DOMAIN_STATUS: ${CRON_CHANGE_DOMAIN_STATUS:-* * * * *}
       CRON_AUTO_APPROVE_TRANSFER: ${CRON_AUTO_APPROVE_TRANSFER:-* * * * *}
       CRON_AUTO_CLEAN: ${CRON_AUTO_CLEAN:-5 0 * * *}
+      CRON_CLEAN_SESSIONS: ${CRON_CLEAN_SESSIONS:-15 * * * *}
     volumes:
       - zone_data:/var/named
     networks:

@@ -85,6 +85,7 @@ The jobs run in the `epp-cron` container, and their output is in `docker compose
 | `CRON_CHANGE_DOMAIN_STATUS` | `change-domain-status.pl` | `* * * * *` |
 | `CRON_AUTO_APPROVE_TRANSFER` | `auto-approve-transfer.pl` | `* * * * *` |
 | `CRON_AUTO_CLEAN` | `auto-clean-unused-contact-and-host.pl` | `5 0 * * *` (daily) |
+| `CRON_CLEAN_SESSIONS` | `clean-epp-sessions.pl`: removes the stored login choices of sessions idle for a day | `15 * * * *` (hourly) |
 
 ## DNS
 

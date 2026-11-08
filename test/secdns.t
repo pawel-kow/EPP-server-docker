@@ -17,7 +17,8 @@ my $secdns_ns = 'xmlns:secDNS="urn:ietf:params:xml:ns:secDNS-1.1"';
 my ($tld) = $dbh->selectrow_array('SELECT `tld` FROM `domain_tld` LIMIT 1');
 $tld =~ s/^\.//;
 
-my $sock = epp_session(clid => 'foo', pw => 'bar');
+# secDNS:infData is only in the replies of a session that chose secDNS-1.1 at login (epp#27)
+my $sock = epp_session(clid => 'foo', pw => 'bar', exturis => ['urn:ietf:params:xml:ns:secDNS-1.1']);
 
 my $domain_seq = 0;
 sub new_domain { return lc(sprintf('secdns-%d-%d-%d.%s', time(), $$, ++$domain_seq, $tld)); }
