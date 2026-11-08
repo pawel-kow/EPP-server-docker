@@ -42,13 +42,15 @@ sub send_frame {
 }
 
 # Opens a session and consumes the greeting. Retries while Apache is still starting.
+# In list context also returns the greeting frame.
 sub epp_connect {
 	my $deadline = time() + $CONNECT_TIMEOUT;
 	while (time() < $deadline) {
 		my $sock = IO::Socket::INET->new(PeerAddr => '127.0.0.1', PeerPort => 700, Proto => 'tcp');
 		if ($sock) {
 			$sock->autoflush(1);
-			return $sock if defined read_frame($sock);
+			my $greeting = read_frame($sock);
+			return wantarray ? ($sock, $greeting) : $sock if defined $greeting;
 			close($sock);
 		}
 		sleep(1);
@@ -60,6 +62,9 @@ sub login_frame {
 	my (%a) = @_;
 	my @uris = @{ $a{objuris} || [map { "urn:ietf:params:xml:ns:$_-1.0" } qw(domain contact host)] };
 	my $svcs = join('', map { "<objURI>$_</objURI>" } @uris);
+	if ($a{exturis} && @{ $a{exturis} }) {
+		$svcs .= '<svcExtension>' . join('', map { "<extURI>$_</extURI>" } @{ $a{exturis} }) . '</svcExtension>';
+	}
 	return qq{<?xml version="1.0" encoding="UTF-8" standalone="no"?>}
 		. qq{<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><login>}
 		. qq{<clID>$a{clid}</clID><pw>$a{pw}</pw>}
@@ -82,6 +87,13 @@ sub login_reply {
 	my $reply = read_frame($sock);
 	close($sock);
 	return $reply;
+}
+
+# The greeting the server sends on a new connection
+sub greeting_frame {
+	my ($sock, $greeting) = epp_connect();
+	close($sock);
+	return $greeting;
 }
 
 # As login_reply, but returns the result code

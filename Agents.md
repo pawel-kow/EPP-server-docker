@@ -51,12 +51,13 @@ Two compose profiles split provisioning from runtime, and they communicate only 
    - `01_registry.sql`: `epp-server/sql/registry.sql` with `GRANT`, `USER` and `FLUSH` lines filtered out
    - `02_registrar.sql`: `create_registrar.sql` with its placeholders filled in; it clears the registrar, TLD and price tables, then inserts two registrars and one TLD
    - `03_user.sql`: `install/user.sql` with `<MYSQL_USER>` filled in
+   - `10_<name>.sql`: each file in `.docker/mariadb_prep/migrations/`, copied as is. These are schema changes on top of `registry.sql`, which comes unchanged from the submodule. Write them to be safe to run twice (`IF NOT EXISTS`, `INSERT IGNORE`), so that they can also be applied to an existing database by hand.
 2. **`run` profile, `mariadb` (10.1).** Mounts the same volume as `/docker-entrypoint-initdb.d`. The image runs those scripts only on first boot, when `mariadb_data` is empty.
 3. **`run` profile, `epp-server` (Fedora 26, Apache).** Starts after `mariadb` is healthy. This image has three roles, chosen by the argument to `.docker/epp/docker_entrypoint.sh`: `apache` (default), `cron` and `nameserver`. `mod_epp` turns EPP traffic into HTTP requests, which `etc/httpd/epp_server_common.conf` aliases to the CGI scripts in `/var/www/cgi-bin/epp` (`command/`, `session/`, `error/`). Login is Apache Basic auth against the `registrar` table via `mod_authn_dbd`, so `registrar.pw` must be in `{SHA}base64(sha1(pwd))` format. `EPPAuthURI` is a URL with no directory behind it, so the auth block must stay a `<Location /epp/auth>`: a `<Directory>` block never applies, and logins then reach `session-login.cgi` unchecked.
 4. **`run` profile, `nameserver` (same image, BIND).** Authoritative for `REGISTRY_TLD`, reading `named.<TLD>.zone` from the `zone_data` volume. It generates `rndc.key` in that volume.
 5. **`run` profile, `epp-cron` (same image, cronie).** Starts after `mariadb` and `nameserver` are healthy, and renders `etc/cron.d/registry` from the `CRON_*` variables. `write-zone.pl` writes into `zone_data`, then runs `rndc` against `nameserver`.
 
-The `epp-server` fork differs from upstream `v1.0.15` in these ways: the zone NS names and the transfer lock and waiting period are configurable, `write-zone.pl` reloads BIND with `rndc` rather than `systemctl`, and the host address type bugs are fixed (see below).
+The `epp-server` fork differs from upstream `v1.0.15` in these ways: the zone NS names and the transfer lock and waiting period are configurable, `write-zone.pl` reloads BIND with `rndc` rather than `systemctl`, the host address type bugs are fixed (see below), and IDNs are supported through the `urn:ietf:params:xml:ns:idn-1.0` extension. The IDN code needs the `idn_table` table and the `domain.idn_*` columns from migration `001_idn.sql`.
 
 ## Configuration: where values take effect
 
@@ -67,6 +68,8 @@ The `epp-server` fork differs from upstream `v1.0.15` in these ways: the zone NS
 - **TLS files** are in `etc/pki/epp/` (git-ignored), bind-mounted into `epp-server`. They are generated only when missing, so delete them to regenerate after changing `EPP_TLS_CN`.
 - **`etc/httpd/conf.d/` and `etc/httpd/epp_server_common.conf`** are bind-mounted, so edits need only a container restart. `epp_server_common.conf` is not copied by the Dockerfile and exists only through this mount. The `conf.d` mount also hides the image's own `conf.d` contents.
 - **DB connection settings exist in two places.** Apache's `DBDParams` hardcodes `host=mariadb` and reads `${MYSQL_USER}`/`${MYSQL_PASSWORD}` from the environment, while the CGI scripts use `registry.conf`. `MYSQL_HOST` affects only the latter.
+- **IDN tables** are rows of `registry.idn_table`: a `tag`, which `idn:table` names, and the permitted `codepoints` as hex values and ranges. `001_idn.sql` seeds `de` and `es`. Rows can be added to a running database and take effect at once.
+- **Migrations on an existing database.** The init scripts run only on first boot, so apply a new migration by hand: `docker compose exec -T mariadb sh -c 'mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" registry' < .docker/mariadb_prep/migrations/<file>.sql`.
 - **Credentials** for the DB user come from `.env`.
 - **`MYSQL_DATABASE` must stay `registry`.**
 - **`dns_opt: single-request`** on `epp-server` and `epp-cron` keeps glibc from sending A and AAAA in parallel. Without it, about 1 lookup of `mariadb` in 5 stalls for the 5s resolver timeout, and every CGI run does such a lookup in a new process. A new service that runs the scripts needs it too.
@@ -129,6 +132,7 @@ docker run --rm -v /workspaces:/w alpine rm -rf /w/EPP-server-docker
 - `mod_epp` ends the session on every `<logout>`, even when the script answers `2400`. The next command gets `2002`.
 - Contact IDs must start with the registrar's `prefix` followed by `-`. `prefix` is `char(2)` and must be unique.
 - A single invalid record stops BIND from loading the zone, and it keeps serving the previous version. After a change, check `logs nameserver` for `not loaded due to errors`.
+- A domain whose first label starts with `xn--` is an IDN. `check`, `info` and `create` validate the A-label as RFC 5891 §4.2 requires. `create` then needs `<idn:data>` with an `idn:table` from `idn_table` (`2003` without, `2306` for an unknown table or a code point outside it); `idn:uname` is optional and must map to `domain:name` exactly, in NFC (`2306`). Without it the server stores the decoded name. `info` returns both. `idn:data` on an ASCII name answers `2306`. The greeting no longer offers `idnLang-1.0`, which was never implemented. The extension is answered whether or not the client named it at login, as with `secDNS`.
 - Rows in `host_addr` written by unfixed `command-create.cgi` have an empty `ip`. `write-zone.pl` and `EPPWriter.pm` derive the type from the address, so these rows still work.
 
 ## Known incomplete areas

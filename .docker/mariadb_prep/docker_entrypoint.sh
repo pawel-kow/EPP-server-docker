@@ -74,3 +74,9 @@ replace_env_vars() {
 }
 
 cat "/install/create_registrar.sql" | replace_reg_cr_date | replace_env_vars > "$output_dir/$registrar_sql_out_file"
+
+#### Migrations: 10_<name>.sql, so they run after the scripts above and in name order
+for migration in /install/migrations/*.sql; do
+  [ -e "$migration" ] || continue
+  cp "$migration" "$output_dir/10_$(basename "$migration")"
+done

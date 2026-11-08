@@ -13,5 +13,7 @@ COPY ./epp-server/sql/registry.sql /install/registry.sql
 # Start Apache in the foreground
 COPY ./.docker/mariadb_prep/docker_entrypoint.sh /entrypoint.sh
 COPY ./.docker/mariadb_prep/create_registrar.sql /install/create_registrar.sql
+# Schema changes on top of registry.sql, applied in name order after the other scripts
+COPY ./.docker/mariadb_prep/migrations/ /install/migrations/
 RUN chmod +x /entrypoint.sh
 CMD ["/entrypoint.sh"]
