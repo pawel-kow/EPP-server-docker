@@ -75,6 +75,25 @@ Upstream refuses a transfer within 60 days of registration or of the last transf
 
 During the waiting period the losing registrar can approve or reject. After it, `auto-approve-transfer.pl` completes the transfer on its next run.
 
+## Testing deletes and restores (RFC 3915)
+
+A delete within the add grace period purges the domain at once. After it, the domain stays in `redemptionPeriod` with the status `pendingDelete`, where a `<rgp:restore op="request"/>` moves it to `pendingRestore` and a `<rgp:restore op="report">` then restores it. A restore without a report in time goes back to `redemptionPeriod`. At the end of the redemption period the domain becomes `pendingDelete`, and it is purged when that period is over. `change-domain-status.pl` makes these changes on its next run (`CRON_CHANGE_DOMAIN_STATUS`).
+
+The periods are in minutes. The defaults are upstream's, so a domain deleted soon after it was created is gone, as before. To test restores, shorten them in `.env`, for example `RGP_ADD_PERIOD_MINUTES=1`, then recreate the containers (`docker compose --profile run up -d`):
+
+| Variable | Default | Upstream |
+| --- | --- | --- |
+| `RGP_ADD_PERIOD_MINUTES` | `7200` | 5 days |
+| `RGP_RENEW_PERIOD_MINUTES` | `7200` | 5 days |
+| `RGP_TRANSFER_PERIOD_MINUTES` | `7200` | 5 days |
+| `RGP_AUTO_RENEW_PERIOD_MINUTES` | `64800` | 45 days |
+| `RGP_EXPIRY_GRACE_MINUTES` (after expiry, before an unrenewed domain goes to `redemptionPeriod`) | `43200` | 30 days |
+| `RGP_REDEMPTION_PERIOD_MINUTES` | `43200` | 30 days |
+| `RGP_PENDING_RESTORE_MINUTES` (deadline for the report) | `10080` | 7 days |
+| `RGP_PENDING_DELETE_MINUTES` | `7200` | 5 days |
+
+A delete within the renew, transfer or auto-renew grace period credits the registrar for that renewal or transfer, and the domain then goes to `redemptionPeriod`. A transfer starts `transferPeriod` whether the losing registrar approves it or `auto-approve-transfer.pl` does after `TRANSFER_WAITING_MINUTES`. Auto-renew is switched off in `change-domain-status.pl`, so `autoRenewPeriod` is never entered unless that is changed.
+
 ## Cron jobs
 
 The jobs run in the `epp-cron` container, and their output is in `docker compose --profile run logs epp-cron`. Set the schedules in `.env`, using standard cron syntax:
