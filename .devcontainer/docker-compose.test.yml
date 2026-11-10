@@ -3,6 +3,18 @@
 # Bind mounts use host paths, and no ports are published, so the stack can run
 # alongside the main one. Every bind mount in docker-compose.yml must be listed here.
 
+# Short RFC 3915 grace periods, distinct from upstream's, so that test/rgp.t can tell them apart.
+# Tests that delete a domain they have just created stay within the add grace period.
+x-test-rgp-env: &test-rgp-env
+  RGP_ADD_PERIOD_MINUTES: 2
+  RGP_RENEW_PERIOD_MINUTES: 6
+  RGP_TRANSFER_PERIOD_MINUTES: 7
+  RGP_AUTO_RENEW_PERIOD_MINUTES: 8
+  RGP_EXPIRY_GRACE_MINUTES: 9
+  RGP_REDEMPTION_PERIOD_MINUTES: 5
+  RGP_PENDING_RESTORE_MINUTES: 3
+  RGP_PENDING_DELETE_MINUTES: 4
+
 # Fails fast when unset; otherwise the paths below would become /install/... on the host
 x-host-workspace: ${LOCAL_WORKSPACE_FOLDER:?must be the workspace path on the Docker host}
 
@@ -15,9 +27,12 @@ services:
     ports: !reset []
   epp-server:
     ports: !reset []
+    environment: *test-rgp-env
     volumes: !override
       - ${LOCAL_WORKSPACE_FOLDER}/etc/pki/epp:/etc/pki/tls/epp
       - ${LOCAL_WORKSPACE_FOLDER}/etc/httpd/conf.d:/etc/httpd/conf.d
       - ${LOCAL_WORKSPACE_FOLDER}/etc/httpd/epp_server_common.conf:/etc/httpd/epp_server_common.conf
+  epp-cron:
+    environment: *test-rgp-env
   nameserver:
     ports: !reset []

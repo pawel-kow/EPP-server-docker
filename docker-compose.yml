@@ -13,6 +13,15 @@ x-registry-env: &registry-env
   ZONE_NS2: ${ZONE_NS2:-ns2.example.net}
   TRANSFER_LOCK_DAYS: ${TRANSFER_LOCK_DAYS:-0} # upstream: 60
   TRANSFER_WAITING_MINUTES: ${TRANSFER_WAITING_MINUTES:-5} # upstream: 7200 (5 days)
+  # RFC 3915 grace periods in minutes; the defaults are upstream's
+  RGP_ADD_PERIOD_MINUTES: ${RGP_ADD_PERIOD_MINUTES:-7200} # 5 days; a delete within it purges at once
+  RGP_RENEW_PERIOD_MINUTES: ${RGP_RENEW_PERIOD_MINUTES:-7200} # 5 days
+  RGP_TRANSFER_PERIOD_MINUTES: ${RGP_TRANSFER_PERIOD_MINUTES:-7200} # 5 days
+  RGP_AUTO_RENEW_PERIOD_MINUTES: ${RGP_AUTO_RENEW_PERIOD_MINUTES:-64800} # 45 days
+  RGP_EXPIRY_GRACE_MINUTES: ${RGP_EXPIRY_GRACE_MINUTES:-43200} # 30 days after expiry before an unrenewed domain is deleted
+  RGP_REDEMPTION_PERIOD_MINUTES: ${RGP_REDEMPTION_PERIOD_MINUTES:-43200} # 30 days
+  RGP_PENDING_RESTORE_MINUTES: ${RGP_PENDING_RESTORE_MINUTES:-10080} # 7 days to send the restore report
+  RGP_PENDING_DELETE_MINUTES: ${RGP_PENDING_DELETE_MINUTES:-7200} # 5 days
 
 # glibc sends A and AAAA in parallel, and one reply is sometimes lost on the way through
 # Docker's DNS. The lookup then stalls for the 5s resolver timeout. Every CGI run looks up
